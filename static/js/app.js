@@ -78,6 +78,10 @@ function showResult(sceneCount, taskId) {
     document.getElementById('downloadBtn').onclick = function() {
         window.location.href = `/download/${taskId}`;
     };
+    
+    document.getElementById('downloadCleanBtn').onclick = function() {
+        window.location.href = `/download_clean/${taskId}`;
+    };
 }
 
 function showError(message) {

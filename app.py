@@ -1,4 +1,7 @@
 import os
+import zipfile
+import shutil
+import json
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -55,9 +58,14 @@ def process_video(task_id):
         if not upload_files:
             return jsonify({'error': '找不到上传的视频'}), 404
         
-        video_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_files[0])
+        video_filename = upload_files[0]
+        video_path = os.path.join(app.config['UPLOAD_FOLDER'], video_filename)
         output_dir = os.path.join(app.config['OUTPUT_FOLDER'], task_id)
         os.makedirs(output_dir, exist_ok=True)
+        
+        original_name = video_filename.replace(f"{task_id}_", "").rsplit('.', 1)[0]
+        with open(os.path.join(output_dir, 'original_name.txt'), 'w', encoding='utf-8') as f:
+            f.write(original_name)
         
         processor = VideoProcessor(video_path, output_dir)
         scenes = processor.detect_scenes()
@@ -76,6 +84,13 @@ def process_video(task_id):
                 script, 
                 frame_info['duration']
             )
+            seedance_result = analyzer.generate_seedance_prompt_for_scene(
+                prompt,
+                script,
+                frame_info.get('first_frame_path'),
+                frame_info.get('last_frame_path'),
+                i + 1
+            )
             analyzed_scenes.append({
                 'scene_number': i + 1,
                 'start_time': frame_info['start_time'],
@@ -84,7 +99,8 @@ def process_video(task_id):
                 'keyframe_path': frame_info['keyframe_path'],
                 'prompt': prompt,
                 'script': script,
-                'complete_prompt': complete_prompt
+                'complete_prompt': complete_prompt,
+                'seedance_prompt': seedance_result
             })
         
         global_info = analyzer.analyze_global_context(
@@ -95,8 +111,24 @@ def process_video(task_id):
         keyframe_paths = [frame_info['keyframe_path'] for frame_info in frames_info]
         condensed_script = analyzer.generate_condensed_script(analyzed_scenes, keyframe_paths)
         
+        if condensed_script:
+            condensed_seedance_result = analyzer.generate_seedance_prompt_for_condensed(condensed_script)
+            condensed_script['seedance_prompt'] = condensed_seedance_result.get('seedance_prompt', '')
+            condensed_script['product_images'] = condensed_seedance_result.get('product_images', [])
+        
+        two_part_script = analyzer.generate_two_part_script(analyzed_scenes, keyframe_paths)
+        
         excel_gen = ExcelGenerator(output_dir)
-        excel_path = excel_gen.generate(global_info, analyzed_scenes, condensed_script)
+        excel_path = excel_gen.generate(global_info, analyzed_scenes, condensed_script, two_part_script)
+        
+        analysis_data = {
+            'global_info': global_info,
+            'analyzed_scenes': analyzed_scenes,
+            'condensed_script': condensed_script,
+            'two_part_script': two_part_script
+        }
+        with open(os.path.join(output_dir, 'analysis_data.json'), 'w', encoding='utf-8') as f:
+            json.dump(analysis_data, f, ensure_ascii=False, indent=2)
         
         return jsonify({
             'success': True,
@@ -112,11 +144,77 @@ def process_video(task_id):
 def download_result(task_id):
     output_dir = os.path.join(app.config['OUTPUT_FOLDER'], task_id)
     excel_path = os.path.join(output_dir, 'video_script.xlsx')
+    frames_dir = os.path.join(output_dir, 'frames')
     
-    if os.path.exists(excel_path):
-        return send_file(excel_path, as_attachment=True)
+    original_name = '分析结果'
+    name_file = os.path.join(output_dir, 'original_name.txt')
+    if os.path.exists(name_file):
+        with open(name_file, 'r', encoding='utf-8') as f:
+            original_name = f.read().strip()
     
-    return jsonify({'error': '文件不存在'}), 404
+    zip_filename = f'AI翻拍_{original_name}_完整包.zip'
+    zip_path = os.path.join(output_dir, zip_filename)
+    excel_filename = f'AI翻拍_{original_name}_完整版.xlsx'
+    
+    if not os.path.exists(excel_path):
+        return jsonify({'error': 'Excel文件不存在'}), 404
+    
+    try:
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(excel_path, excel_filename)
+            
+            if os.path.exists(frames_dir):
+                for filename in os.listdir(frames_dir):
+                    if filename.startswith('镜头') and filename.endswith('.jpg'):
+                        file_path = os.path.join(frames_dir, filename)
+                        zipf.write(file_path, os.path.join('关键帧', filename))
+        
+        return send_file(zip_path, as_attachment=True, download_name=zip_filename)
+    
+    except Exception as e:
+        return jsonify({'error': f'生成ZIP文件失败: {str(e)}'}), 500
+
+@app.route('/download_clean/<task_id>')
+def download_clean_result(task_id):
+    output_dir = os.path.join(app.config['OUTPUT_FOLDER'], task_id)
+    
+    original_name = '分析结果'
+    name_file = os.path.join(output_dir, 'original_name.txt')
+    if os.path.exists(name_file):
+        with open(name_file, 'r', encoding='utf-8') as f:
+            original_name = f.read().strip()
+    
+    clean_excel_filename = f'AI翻拍_{original_name}_纯净版.xlsx'
+    clean_excel_path = os.path.join(output_dir, clean_excel_filename)
+    
+    if os.path.exists(clean_excel_path):
+        return send_file(clean_excel_path, as_attachment=True, download_name=clean_excel_filename)
+    
+    try:
+        analysis_data_path = os.path.join(output_dir, 'analysis_data.json')
+        if not os.path.exists(analysis_data_path):
+            return jsonify({'error': '找不到分析数据'}), 404
+        
+        with open(analysis_data_path, 'r', encoding='utf-8') as f:
+            analysis_data = json.load(f)
+        
+        excel_gen = ExcelGenerator(output_dir)
+        excel_gen.generate(
+            analysis_data['global_info'],
+            analysis_data['analyzed_scenes'],
+            analysis_data['condensed_script'],
+            analysis_data['two_part_script'],
+            clean_mode=True
+        )
+        
+        original_excel = os.path.join(output_dir, 'video_script.xlsx')
+        if os.path.exists(original_excel):
+            shutil.copy(original_excel, clean_excel_path)
+        
+        return send_file(clean_excel_path, as_attachment=True, download_name=clean_excel_filename)
+    
+    except Exception as e:
+        return jsonify({'error': f'生成纯净版Excel失败: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

@@ -2,12 +2,13 @@ import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.drawing.image import Image as OpenpyxlImage
 
 class ExcelGenerator:
     def __init__(self, output_dir):
         self.output_dir = output_dir
     
-    def generate(self, global_info, scenes, condensed_script=None):
+    def generate(self, global_info, scenes, condensed_script=None, two_part_script=None, clean_mode=False):
         wb = Workbook()
         
         ws_global = wb.active
@@ -40,9 +41,151 @@ class ExcelGenerator:
         ws_global.column_dimensions['A'].width = 20
         ws_global.column_dimensions['B'].width = 60
         
+        if condensed_script:
+            ws_condensed = wb.create_sheet(title="浓缩脚本")
+            
+            ws_condensed['A1'] = '项目'
+            ws_condensed['B1'] = '内容'
+            ws_condensed['A1'].fill = header_fill
+            ws_condensed['B1'].fill = header_fill
+            ws_condensed['A1'].font = header_font
+            ws_condensed['B1'].font = header_font
+            
+            if not clean_mode:
+                ws_condensed['C1'] = '产品图片'
+                ws_condensed['C1'].fill = header_fill
+                ws_condensed['C1'].font = header_font
+            
+            condensed_data = [
+                ['视频时长', condensed_script.get('duration', '10-15秒')],
+                ['核心故事', condensed_script.get('core_story', '')],
+                ['关键画面1 (0-5秒)', condensed_script.get('key_scene_1', '')],
+                ['关键画面2 (5-10秒)', condensed_script.get('key_scene_2', '')],
+                ['关键画面3 (10-15秒)', condensed_script.get('key_scene_3', '')],
+                ['完整Sora提示词', condensed_script.get('complete_prompt', '')],
+                ['中文提示词(Seedance 2.0)', condensed_script.get('seedance_prompt', '')]
+            ]
+            
+            for i, row_data in enumerate(condensed_data, start=2):
+                ws_condensed[f'A{i}'] = row_data[0]
+                ws_condensed[f'B{i}'] = row_data[1]
+                ws_condensed[f'B{i}'].alignment = Alignment(wrap_text=True, vertical='top')
+            
+            if not clean_mode:
+                product_images = condensed_script.get('product_images', [])
+                if product_images:
+                    row_idx = 8
+                    ws_condensed.row_dimensions[row_idx].height = max(100, len(product_images) * 80)
+                    
+                    for img_idx, img_path in enumerate(product_images):
+                        if os.path.exists(img_path):
+                            try:
+                                img = OpenpyxlImage(img_path)
+                                img.width = 150
+                                img.height = 150
+                                
+                                cell_position = f'C{row_idx}'
+                                img.anchor = cell_position
+                                ws_condensed.add_image(img)
+                                
+                                ws_condensed[cell_position] = os.path.basename(img_path)
+                            except Exception as e:
+                                print(f"无法插入图片 {img_path}: {e}")
+            
+            ws_condensed.column_dimensions['A'].width = 25
+            ws_condensed.column_dimensions['B'].width = 100
+            if not clean_mode:
+                ws_condensed.column_dimensions['C'].width = 30
+            
+            ws_condensed.row_dimensions[7].height = 80
+            ws_condensed.row_dimensions[8].height = 100
+        
+        if two_part_script:
+            ws_two_part = wb.create_sheet(title="两段式脚本")
+            
+            ws_two_part['A1'] = '项目'
+            ws_two_part['B1'] = '内容'
+            ws_two_part['A1'].fill = header_fill
+            ws_two_part['B1'].fill = header_fill
+            ws_two_part['A1'].font = header_font
+            ws_two_part['B1'].font = header_font
+            
+            if not clean_mode:
+                ws_two_part['C1'] = '首尾帧'
+                ws_two_part['D1'] = '产品图片'
+                ws_two_part['C1'].fill = header_fill
+                ws_two_part['D1'].fill = header_fill
+                ws_two_part['C1'].font = header_font
+                ws_two_part['D1'].font = header_font
+            
+            two_part_data = [
+                ['核心故事', two_part_script.get('core_story', '')],
+                ['上集提示词', two_part_script.get('part1_seedance_prompt', '')],
+                ['下集提示词', two_part_script.get('part2_seedance_prompt', '')]
+            ]
+            
+            for i, row_data in enumerate(two_part_data, start=2):
+                ws_two_part[f'A{i}'] = row_data[0]
+                ws_two_part[f'B{i}'] = row_data[1]
+                ws_two_part[f'B{i}'].alignment = Alignment(wrap_text=True, vertical='top')
+            
+            if not clean_mode:
+                part1_images = two_part_script.get('part1_product_images', [])
+                if part1_images:
+                    row_idx = 3
+                    ws_two_part.row_dimensions[row_idx].height = max(100, len(part1_images) * 80)
+                    
+                    for img_idx, img_path in enumerate(part1_images):
+                        if os.path.exists(img_path):
+                            try:
+                                img = OpenpyxlImage(img_path)
+                                img.width = 150
+                                img.height = 150
+                                
+                                cell_position = f'D{row_idx}'
+                                img.anchor = cell_position
+                                ws_two_part.add_image(img)
+                                
+                                ws_two_part[cell_position] = os.path.basename(img_path)
+                            except Exception as e:
+                                print(f"无法插入图片 {img_path}: {e}")
+                
+                part2_images = two_part_script.get('part2_product_images', [])
+                if part2_images:
+                    row_idx = 4
+                    ws_two_part.row_dimensions[row_idx].height = max(100, len(part2_images) * 80)
+                    
+                    for img_idx, img_path in enumerate(part2_images):
+                        if os.path.exists(img_path):
+                            try:
+                                img = OpenpyxlImage(img_path)
+                                img.width = 150
+                                img.height = 150
+                                
+                                cell_position = f'D{row_idx}'
+                                img.anchor = cell_position
+                                ws_two_part.add_image(img)
+                                
+                                ws_two_part[cell_position] = os.path.basename(img_path)
+                            except Exception as e:
+                                print(f"无法插入图片 {img_path}: {e}")
+            
+            ws_two_part.column_dimensions['A'].width = 30
+            ws_two_part.column_dimensions['B'].width = 100
+            if not clean_mode:
+                ws_two_part.column_dimensions['C'].width = 20
+                ws_two_part.column_dimensions['D'].width = 30
+            
+            ws_two_part.row_dimensions[3].height = 100
+            ws_two_part.row_dimensions[4].height = 100
+        
         ws_scenes = wb.create_sheet(title="镜头详情")
         
-        headers = ['镜头编号', '开始时间(秒)', '结束时间(秒)', '时长(秒)', '镜头类型', 'Sora提示词(场景描述)', '台词脚本', '完整Sora提示词(可直接使用)', '关键帧路径']
+        if clean_mode:
+            headers = ['镜头编号', '开始时间(秒)', '结束时间(秒)', '时长(秒)', '镜头类型', 'Sora提示词(场景描述)', '台词脚本', '完整Sora提示词(可直接使用)', '中文提示词(Seedance 2.0)']
+        else:
+            headers = ['镜头编号', '开始时间(秒)', '结束时间(秒)', '时长(秒)', '镜头类型', 'Sora提示词(场景描述)', '台词脚本', '完整Sora提示词(可直接使用)', '中文提示词(Seedance 2.0)', '产品图片', '关键帧路径']
+        
         for col, header in enumerate(headers, start=1):
             cell = ws_scenes.cell(row=1, column=col)
             cell.value = header
@@ -67,8 +210,37 @@ class ExcelGenerator:
             complete_prompt = scene.get('complete_prompt', '')
             ws_scenes.cell(row=i, column=8, value=complete_prompt)
             
-            relative_path = os.path.relpath(scene['keyframe_path'], self.output_dir)
-            ws_scenes.cell(row=i, column=9, value=f"./{relative_path}")
+            seedance_prompt_data = scene.get('seedance_prompt', '')
+            if isinstance(seedance_prompt_data, dict):
+                seedance_prompt = seedance_prompt_data.get('seedance_prompt', '')
+                product_images = seedance_prompt_data.get('product_images', [])
+            else:
+                seedance_prompt = seedance_prompt_data
+                product_images = []
+            
+            ws_scenes.cell(row=i, column=9, value=seedance_prompt)
+            
+            if not clean_mode:
+                if product_images:
+                    ws_scenes.row_dimensions[i].height = max(100, len(product_images) * 80)
+                    
+                    for img_idx, img_path in enumerate(product_images):
+                        if os.path.exists(img_path):
+                            try:
+                                img = OpenpyxlImage(img_path)
+                                img.width = 150
+                                img.height = 150
+                                
+                                cell_position = f'J{i}'
+                                img.anchor = cell_position
+                                ws_scenes.add_image(img)
+                                
+                                ws_scenes.cell(row=i, column=10, value=os.path.basename(img_path))
+                            except Exception as e:
+                                print(f"无法插入图片 {img_path}: {e}")
+                
+                relative_path = os.path.relpath(scene['keyframe_path'], self.output_dir)
+                ws_scenes.cell(row=i, column=11, value=f"./{relative_path}")
         
         ws_scenes.column_dimensions['A'].width = 12
         ws_scenes.column_dimensions['B'].width = 15
@@ -78,40 +250,14 @@ class ExcelGenerator:
         ws_scenes.column_dimensions['F'].width = 60
         ws_scenes.column_dimensions['G'].width = 50
         ws_scenes.column_dimensions['H'].width = 100
-        ws_scenes.column_dimensions['I'].width = 40
+        ws_scenes.column_dimensions['I'].width = 100
+        if not clean_mode:
+            ws_scenes.column_dimensions['J'].width = 30
+            ws_scenes.column_dimensions['K'].width = 40
         
         for row in ws_scenes.iter_rows(min_row=2, max_row=len(scenes)+1):
             for cell in row:
                 cell.alignment = Alignment(wrap_text=True, vertical='top')
-        
-        if condensed_script:
-            ws_condensed = wb.create_sheet(title="浓缩脚本")
-            
-            ws_condensed['A1'] = '项目'
-            ws_condensed['B1'] = '内容'
-            ws_condensed['A1'].fill = header_fill
-            ws_condensed['B1'].fill = header_fill
-            ws_condensed['A1'].font = header_font
-            ws_condensed['B1'].font = header_font
-            
-            condensed_data = [
-                ['视频时长', condensed_script.get('duration', '10-15秒')],
-                ['核心故事', condensed_script.get('core_story', '')],
-                ['关键画面1 (0-5秒)', condensed_script.get('key_scene_1', '')],
-                ['关键画面2 (5-10秒)', condensed_script.get('key_scene_2', '')],
-                ['关键画面3 (10-15秒)', condensed_script.get('key_scene_3', '')],
-                ['完整Sora提示词', condensed_script.get('complete_prompt', '')]
-            ]
-            
-            for i, row_data in enumerate(condensed_data, start=2):
-                ws_condensed[f'A{i}'] = row_data[0]
-                ws_condensed[f'B{i}'] = row_data[1]
-                ws_condensed[f'B{i}'].alignment = Alignment(wrap_text=True, vertical='top')
-            
-            ws_condensed.column_dimensions['A'].width = 25
-            ws_condensed.column_dimensions['B'].width = 100
-            
-            ws_condensed.row_dimensions[7].height = 80
         
         excel_path = os.path.join(self.output_dir, 'video_script.xlsx')
         wb.save(excel_path)

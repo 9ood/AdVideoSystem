@@ -46,9 +46,14 @@
                         <p>检测到 <strong id="sceneCount">0</strong> 个镜头</p>
                         <p>已生成 Sora 脚本和关键帧图片</p>
                     </div>
-                    <button class="btn btn-success" id="downloadBtn">
-                        📥 下载结果文件
-                    </button>
+                    <div class="download-buttons">
+                        <button class="btn btn-success" id="downloadBtn">
+                            📦 下载完整包
+                        </button>
+                        <button class="btn btn-success" id="downloadCleanBtn">
+                            📄 下载纯脚本
+                        </button>
+                    </div>
                     <button class="btn btn-secondary" onclick="location.reload()">
                         🔄 处理新视频
                     </button>
