@@ -40,6 +40,7 @@ Thumbs.db
 # Project specific
 uploads/
 outputs/
+token_log.json
 *.mp4
 *.avi
 *.mov

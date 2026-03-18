@@ -1,6 +1,40 @@
 import requests
 import base64
 import os
+import json
+from datetime import datetime
+
+TOKEN_LOG_PATH = os.path.join(os.path.dirname(__file__), 'token_log.json')
+
+PRICE_PER_1K_INPUT = 0.0001
+PRICE_PER_1K_OUTPUT = 0.0004
+
+def _log_token_usage(model, action, input_tokens, output_tokens):
+    total_tokens = input_tokens + output_tokens
+    cost = (input_tokens / 1000 * PRICE_PER_1K_INPUT) + (output_tokens / 1000 * PRICE_PER_1K_OUTPUT)
+
+    record = {
+        'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'model': model,
+        'action': action,
+        'input_tokens': input_tokens,
+        'output_tokens': output_tokens,
+        'total_tokens': total_tokens,
+        'cost_usd': round(cost, 6)
+    }
+
+    logs = []
+    if os.path.exists(TOKEN_LOG_PATH):
+        try:
+            with open(TOKEN_LOG_PATH, 'r', encoding='utf-8') as f:
+                logs = json.load(f)
+        except Exception:
+            logs = []
+
+    logs.append(record)
+
+    with open(TOKEN_LOG_PATH, 'w', encoding='utf-8') as f:
+        json.dump(logs, f, ensure_ascii=False, indent=2)
 
 class AIAnalyzer:
     def __init__(self, api_key, model='google/gemini-3-flash-preview'):
@@ -65,6 +99,8 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
             response = requests.post(self.base_url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
+            usage = result.get('usage', {})
+            _log_token_usage(self.model, '分析镜头画面', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             return result['choices'][0]['message']['content'].strip()
         except Exception as e:
             return f"Error analyzing frame: {str(e)}"
@@ -118,6 +154,8 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
             response = requests.post(self.base_url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
+            usage = result.get('usage', {})
+            _log_token_usage(self.model, '分析全局信息', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             content = result['choices'][0]['message']['content'].strip()
             
             lines = content.split('\n')
@@ -196,6 +234,8 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
             response = requests.post(self.base_url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
+            usage = result.get('usage', {})
+            _log_token_usage(self.model, '生成台词', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             script = result['choices'][0]['message']['content'].strip()
             return script if script and script != "无台词" else ""
         except Exception as e:
@@ -352,6 +392,8 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
             response = requests.post(self.base_url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
+            usage = result.get('usage', {})
+            _log_token_usage(self.model, '情绪转换分析', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             content = result['choices'][0]['message']['content'].strip()
             
             emotion_info = {
@@ -508,9 +550,10 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
             response = requests.post(self.base_url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
+            usage = result.get('usage', {})
+            _log_token_usage(self.model, '生成浓缩脚本', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             content = result['choices'][0]['message']['content'].strip()
             
-            # 解析AI返回的内容
             condensed_info = {
                 'duration': '10-15秒',
                 'core_story': '',
@@ -633,6 +676,8 @@ Seedance 2.0 核心规则：
             response = requests.post(self.base_url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
+            usage = result.get('usage', {})
+            _log_token_usage(self.model, '生成镜头Seedance提示词', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             seedance_prompt = result['choices'][0]['message']['content'].strip()
             
             # 提取产品图片引用
@@ -819,6 +864,8 @@ Seedance 2.0 核心规则：
             response = requests.post(self.base_url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
+            usage = result.get('usage', {})
+            _log_token_usage(self.model, '生成两段式脚本', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             content = result['choices'][0]['message']['content'].strip()
             
             two_part_info = {
@@ -962,6 +1009,8 @@ Seedance 2.0 核心规则：
             response = requests.post(self.base_url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
+            usage = result.get('usage', {})
+            _log_token_usage(self.model, '生成浓缩Seedance提示词', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             seedance_prompt = result['choices'][0]['message']['content'].strip()
             
             product_image_mapping = {

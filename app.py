@@ -216,5 +216,48 @@ def download_clean_result(task_id):
     except Exception as e:
         return jsonify({'error': f'生成纯净版Excel失败: {str(e)}'}), 500
 
+@app.route('/token_usage_page')
+def token_usage_page():
+    return render_template('token_usage.html')
+
+@app.route('/token_usage')
+def token_usage():
+    log_path = os.path.join(os.path.dirname(__file__), 'token_log.json')
+    if not os.path.exists(log_path):
+        logs = []
+    else:
+        try:
+            with open(log_path, 'r', encoding='utf-8') as f:
+                logs = json.load(f)
+        except Exception:
+            logs = []
+
+    total_input = sum(r.get('input_tokens', 0) for r in logs)
+    total_output = sum(r.get('output_tokens', 0) for r in logs)
+    total_cost = sum(r.get('cost_usd', 0) for r in logs)
+
+    today = __import__('datetime').date.today().strftime('%Y-%m-%d')
+    today_logs = [r for r in logs if r.get('time', '').startswith(today)]
+    today_input = sum(r.get('input_tokens', 0) for r in today_logs)
+    today_output = sum(r.get('output_tokens', 0) for r in today_logs)
+    today_cost = sum(r.get('cost_usd', 0) for r in today_logs)
+
+    return jsonify({
+        'total': {
+            'input_tokens': total_input,
+            'output_tokens': total_output,
+            'total_tokens': total_input + total_output,
+            'cost_usd': round(total_cost, 6)
+        },
+        'today': {
+            'date': today,
+            'input_tokens': today_input,
+            'output_tokens': today_output,
+            'total_tokens': today_input + today_output,
+            'cost_usd': round(today_cost, 6)
+        },
+        'records': list(reversed(logs))
+    })
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
