@@ -4,7 +4,7 @@
   "category": "工具类",
   "type": "service",
   "status": "stopped",
-  "summary": "上传视频后自动拆镜头、分析画面、生成脚本和 Excel 结果包。",
+  "summary": "上传视频后，自动拆镜头、分析画面、生成脚本和 Excel 结果包。",
   "description": "这是一个网页服务项目。它负责视频镜头检测、关键帧提取、AI 提示词生成和结果导出。",
   "path": "E:/Project/codex/AdVideoSystem",
   "entry": "http://127.0.0.1:8080/",
@@ -13,11 +13,34 @@
   "control": {
     "enabled": true,
     "type": "service",
-    "actions": ["test", "run", "stop"]
+    "actions": ["test", "run", "stop"],
+    "testCommand": {
+      "command": "powershell",
+      "args": ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", "scripts/test.ps1"]
+    },
+    "runCommand": {
+      "command": "powershell",
+      "args": ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", "scripts/start_detached.ps1"]
+    },
+    "stopCommand": {
+      "command": "powershell",
+      "args": ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", "scripts/stop_server.ps1"]
+    },
+    "processMatch": {
+      "name": "python.exe",
+      "commandLinePattern": "*AdVideoSystem*run_server.py*"
+    }
   },
   "paths": {
     "logs": "logs",
     "output": "outputs",
     "uploads": "uploads"
-  }
+  },
+  "timeline": [
+    {
+      "time": "今天",
+      "title": "完成真实接入",
+      "note": "已经跑通真实视频处理、Excel 生成和结果包下载。"
+    }
+  ]
 }
