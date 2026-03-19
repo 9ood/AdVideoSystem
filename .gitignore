@@ -25,6 +25,9 @@ wheels/
 
 # Environment variables
 .env
+.venv/
+logs/
+_repo_backup_20260319/
 
 # IDE
 .vscode/

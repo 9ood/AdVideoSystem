@@ -5,6 +5,16 @@ import json
 from datetime import datetime
 
 TOKEN_LOG_PATH = os.path.join(os.path.dirname(__file__), 'token_log.json')
+RESOURCE_PIC_DIR = os.path.join(os.path.dirname(__file__), 'resource', 'pic')
+
+PRODUCT_IMAGE_MAPPING = {
+    '@logo': os.path.join(RESOURCE_PIC_DIR, 'logo.png'),
+    '@启动页': os.path.join(RESOURCE_PIC_DIR, '启动页.png'),
+    '@玩法页': os.path.join(RESOURCE_PIC_DIR, '玩法页.png'),
+    '@练琴页': os.path.join(RESOURCE_PIC_DIR, '练琴页.png'),
+    '@选择关卡页': os.path.join(RESOURCE_PIC_DIR, '选择关卡页.png'),
+    '@选择关卡页2': os.path.join(RESOURCE_PIC_DIR, '选择关卡页2.png')
+}
 
 PRICE_PER_1K_INPUT = 0.0001
 PRICE_PER_1K_OUTPUT = 0.0004
@@ -35,6 +45,14 @@ def _log_token_usage(model, action, input_tokens, output_tokens):
 
     with open(TOKEN_LOG_PATH, 'w', encoding='utf-8') as f:
         json.dump(logs, f, ensure_ascii=False, indent=2)
+
+def _collect_product_images(seedance_prompt):
+    product_images = []
+    for ref_name, img_path in PRODUCT_IMAGE_MAPPING.items():
+        if ref_name in seedance_prompt and os.path.exists(img_path):
+            if img_path not in product_images:
+                product_images.append(img_path)
+    return product_images
 
 class AIAnalyzer:
     def __init__(self, api_key, model='google/gemini-3-flash-preview'):
@@ -681,24 +699,9 @@ Seedance 2.0 核心规则：
             seedance_prompt = result['choices'][0]['message']['content'].strip()
             
             # 提取产品图片引用
-            product_image_mapping = {
-                '@logo': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/logo.png',
-                '@启动页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/启动页.png',
-                '@玩法页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/玩法页.png',
-                '@练琴页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/练琴页.png',
-                '@选择关卡页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/选择关卡页.png',
-                '@选择关卡页2': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/选择关卡页2.png'
-            }
-            
-            product_images = []
-            for ref_name, img_path in product_image_mapping.items():
-                if ref_name in seedance_prompt and os.path.exists(img_path):
-                    if img_path not in product_images:
-                        product_images.append(img_path)
-            
             return {
                 'seedance_prompt': seedance_prompt,
-                'product_images': product_images
+                'product_images': _collect_product_images(seedance_prompt)
             }
             
         except Exception as e:
@@ -899,33 +902,12 @@ Seedance 2.0 核心规则：
                 elif current_field and line:
                     two_part_info[current_field] += ' ' + line
             
-            product_image_mapping = {
-                '@logo': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/logo.png',
-                '@启动页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/启动页.png',
-                '@玩法页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/玩法页.png',
-                '@练琴页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/练琴页.png',
-                '@选择关卡页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/选择关卡页.png',
-                '@选择关卡页2': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/选择关卡页2.png'
-            }
-            
-            import re
-            
-            part1_images = []
-            part1_prompt = two_part_info.get('part1_seedance_prompt', '')
-            for ref_name, img_path in product_image_mapping.items():
-                if ref_name in part1_prompt and os.path.exists(img_path):
-                    if img_path not in part1_images:
-                        part1_images.append(img_path)
-            
-            part2_images = []
-            part2_prompt = two_part_info.get('part2_seedance_prompt', '')
-            for ref_name, img_path in product_image_mapping.items():
-                if ref_name in part2_prompt and os.path.exists(img_path):
-                    if img_path not in part2_images:
-                        part2_images.append(img_path)
-            
-            two_part_info['part1_product_images'] = part1_images
-            two_part_info['part2_product_images'] = part2_images
+            two_part_info['part1_product_images'] = _collect_product_images(
+                two_part_info.get('part1_seedance_prompt', '')
+            )
+            two_part_info['part2_product_images'] = _collect_product_images(
+                two_part_info.get('part2_seedance_prompt', '')
+            )
             
             return two_part_info
             
@@ -1013,24 +995,9 @@ Seedance 2.0 核心规则：
             _log_token_usage(self.model, '生成浓缩Seedance提示词', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
             seedance_prompt = result['choices'][0]['message']['content'].strip()
             
-            product_image_mapping = {
-                '@logo': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/logo.png',
-                '@启动页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/启动页.png',
-                '@玩法页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/玩法页.png',
-                '@练琴页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/练琴页.png',
-                '@选择关卡页': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/选择关卡页.png',
-                '@选择关卡页2': '/Users/ssg/Documents/CodeX/AdVideoSystem/resource/pic/选择关卡页2.png'
-            }
-            
-            product_images = []
-            for ref_name, img_path in product_image_mapping.items():
-                if ref_name in seedance_prompt and os.path.exists(img_path):
-                    if img_path not in product_images:
-                        product_images.append(img_path)
-            
             return {
                 'seedance_prompt': seedance_prompt,
-                'product_images': product_images
+                'product_images': _collect_product_images(seedance_prompt)
             }
             
         except Exception as e:

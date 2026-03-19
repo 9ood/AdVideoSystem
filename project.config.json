@@ -1,0 +1,23 @@
+{
+  "id": "ad-video-system",
+  "name": "AI 视频翻拍系统",
+  "category": "工具类",
+  "type": "service",
+  "status": "stopped",
+  "summary": "上传视频后自动拆镜头、分析画面、生成脚本和 Excel 结果包。",
+  "description": "这是一个网页服务项目。它负责视频镜头检测、关键帧提取、AI 提示词生成和结果导出。",
+  "path": "E:/Project/codex/AdVideoSystem",
+  "entry": "http://127.0.0.1:8080/",
+  "health": "http://127.0.0.1:8080/",
+  "integration": "project-config",
+  "control": {
+    "enabled": true,
+    "type": "service",
+    "actions": ["test", "run", "stop"]
+  },
+  "paths": {
+    "logs": "logs",
+    "output": "outputs",
+    "uploads": "uploads"
+  }
+}
