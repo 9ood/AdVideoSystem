@@ -4,121 +4,71 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Token 用量统计</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #f7f8fa;
-            color: #1f2937;
-            margin: 0;
-            padding: 24px;
-        }
-        .container {
-            max-width: 960px;
-            margin: 0 auto;
-        }
-        .card {
-            background: #fff;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-            margin-bottom: 20px;
-        }
-        h1, h2 {
-            margin-top: 0;
-        }
-        .summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-        }
-        .metric {
-            background: #f3f4f6;
-            border-radius: 10px;
-            padding: 16px;
-        }
-        .label {
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-        .value {
-            font-size: 24px;
-            font-weight: 700;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            border-bottom: 1px solid #e5e7eb;
-            text-align: left;
-            padding: 12px 8px;
-            font-size: 14px;
-        }
-        th {
-            color: #6b7280;
-        }
-        .empty {
-            color: #6b7280;
-        }
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #2563eb;
-            text-decoration: none;
-        }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="container">
-        <a class="back-link" href="/">返回首页</a>
-        <div class="card">
-            <h1>Token 用量统计</h1>
-            <p>这里会显示总用量、今日用量和最近调用记录。</p>
-        </div>
-
-        <div class="card">
-            <h2>汇总</h2>
-            <div class="summary">
-                <div class="metric">
-                    <div class="label">总输入 Tokens</div>
-                    <div class="value" id="total-input">0</div>
+    <div class="page stack">
+        <section class="panel panel-body hero">
+            <div class="hero-top">
+                <div>
+                    <div class="eyebrow">AdVideoSystem</div>
+                    <h1 class="page-title">Token 用量统计</h1>
+                    <p class="paragraph">这里用来看这套翻拍系统的总消耗、今天消耗，以及最近一次次调用记录。</p>
                 </div>
-                <div class="metric">
-                    <div class="label">总输出 Tokens</div>
-                    <div class="value" id="total-output">0</div>
-                </div>
-                <div class="metric">
-                    <div class="label">总费用 (USD)</div>
-                    <div class="value" id="total-cost">0</div>
-                </div>
-                <div class="metric">
-                    <div class="label">今日费用 (USD)</div>
-                    <div class="value" id="today-cost">0</div>
+                <div class="hero-actions">
+                    <span class="badge accent">统计页</span>
+                    <a class="btn btn-secondary" href="/">返回翻拍系统</a>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div class="card">
-            <h2>最近记录</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>时间</th>
-                        <th>动作</th>
-                        <th>模型</th>
-                        <th>输入</th>
-                        <th>输出</th>
-                        <th>费用</th>
-                    </tr>
-                </thead>
-                <tbody id="records">
-                    <tr>
-                        <td colspan="6" class="empty">还没有记录</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+        <section class="panel panel-body">
+            <strong class="title">汇总</strong>
+            <div class="records" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                <div class="record-card">
+                    <strong>总输入 Tokens</strong>
+                    <div class="mono" id="total-input">0</div>
+                </div>
+                <div class="record-card">
+                    <strong>总输出 Tokens</strong>
+                    <div class="mono" id="total-output">0</div>
+                </div>
+                <div class="record-card">
+                    <strong>总费用 (USD)</strong>
+                    <div class="mono" id="total-cost">0</div>
+                </div>
+                <div class="record-card">
+                    <strong>今日费用 (USD)</strong>
+                    <div class="mono" id="today-cost">0</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel panel-body">
+            <strong class="title">最近记录</strong>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>动作</th>
+                            <th>模型</th>
+                            <th>输入</th>
+                            <th>输出</th>
+                            <th>费用</th>
+                        </tr>
+                    </thead>
+                    <tbody id="records">
+                        <tr>
+                            <td colspan="6" class="muted">还没有记录</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
     </div>
 
     <script>
@@ -141,7 +91,7 @@
 
             const tbody = document.getElementById("records");
             if (!data.records || data.records.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty">还没有记录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="muted">还没有记录</td></tr>';
                 return;
             }
 
@@ -159,7 +109,7 @@
 
         loadTokenUsage().catch(() => {
             document.getElementById("records").innerHTML =
-                '<tr><td colspan="6" class="empty">读取失败，请稍后再试</td></tr>';
+                '<tr><td colspan="6" class="muted">读取失败，请稍后再试</td></tr>';
         });
     </script>
 </body>

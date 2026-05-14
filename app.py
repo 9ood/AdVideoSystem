@@ -9,11 +9,11 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
-from ai_analyzer import AIAnalyzer
+from ai_analyzer import AIAnalyzer, AIServiceError
 from excel_generator import ExcelGenerator
 from video_processor import VideoProcessor
 
-load_dotenv()
+load_dotenv(override=True)
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
@@ -102,12 +102,13 @@ def process_video(task_id):
                 "error": f"关键帧生成失败，镜头 {missing_keyframes[0]} 没有生成可用图片"
             }), 500
 
-        api_key = os.getenv("OPENROUTER_API_KEY")
+        api_key = os.getenv("AI_API_KEY") or os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            return jsonify({"error": "OPENROUTER_API_KEY 未配置，无法执行 AI 分析"}), 400
+            return jsonify({"error": "AI_API_KEY 或 OPENROUTER_API_KEY 未配置，无法执行 AI 分析"}), 400
 
-        model = os.getenv("GEMINI_MODEL", "google/gemini-3-flash-preview")
-        analyzer = AIAnalyzer(api_key, model)
+        model = os.getenv("AI_MODEL") or os.getenv("GEMINI_MODEL", "google/gemini-3-flash-preview")
+        base_url = os.getenv("AI_API_BASE_URL", "https://openrouter.ai/api/v1/chat/completions")
+        analyzer = AIAnalyzer(api_key, model, base_url=base_url)
 
         analyzed_scenes = []
         for i, frame_info in enumerate(frames_info):
@@ -171,6 +172,8 @@ def process_video(task_id):
             "download_url": f"/download/{task_id}",
         })
 
+    except AIServiceError as e:
+        return jsonify({"error": str(e)}), 502
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

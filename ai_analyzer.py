@@ -1,8 +1,10 @@
-import requests
 import base64
 import os
 import json
+import time
 from datetime import datetime
+
+import requests
 
 TOKEN_LOG_PATH = os.path.join(os.path.dirname(__file__), 'token_log.json')
 RESOURCE_PIC_DIR = os.path.join(os.path.dirname(__file__), 'resource', 'pic')
@@ -18,6 +20,15 @@ PRODUCT_IMAGE_MAPPING = {
 
 PRICE_PER_1K_INPUT = 0.0001
 PRICE_PER_1K_OUTPUT = 0.0004
+DEFAULT_FALLBACK_MODELS = ("qwen/qwen2.5-vl-72b-instruct",)
+MAX_RESPONSE_PARSE_RETRIES = 2
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 90
+DEFAULT_REQUEST_MAX_RETRIES = 2
+DEFAULT_REQUEST_RETRY_DELAY_SECONDS = 2
+
+
+class AIServiceError(RuntimeError):
+    pass
 
 def _log_token_usage(model, action, input_tokens, output_tokens):
     total_tokens = input_tokens + output_tokens
@@ -55,10 +66,200 @@ def _collect_product_images(seedance_prompt):
     return product_images
 
 class AIAnalyzer:
-    def __init__(self, api_key, model='google/gemini-3-flash-preview'):
+    def __init__(self, api_key, model='qwen/qwen3.6-plus', base_url=None):
         self.api_key = api_key
         self.model = model
-        self.base_url = 'https://openrouter.ai/api/v1/chat/completions'
+        self.base_url = base_url or os.getenv(
+            'AI_API_BASE_URL',
+            'https://openrouter.ai/api/v1/chat/completions',
+        )
+        self.request_timeout_seconds = int(
+            os.getenv('AI_REQUEST_TIMEOUT_SECONDS', str(DEFAULT_REQUEST_TIMEOUT_SECONDS))
+        )
+        self.request_max_retries = max(
+            1,
+            int(os.getenv('AI_REQUEST_MAX_RETRIES', str(DEFAULT_REQUEST_MAX_RETRIES))),
+        )
+        self.request_retry_delay_seconds = max(
+            0,
+            int(os.getenv('AI_REQUEST_RETRY_DELAY_SECONDS', str(DEFAULT_REQUEST_RETRY_DELAY_SECONDS))),
+        )
+        fallback_models = os.getenv('AI_FALLBACK_MODELS')
+        if fallback_models is None:
+            fallback_models = os.getenv(
+                'OPENROUTER_FALLBACK_MODELS',
+                ','.join(DEFAULT_FALLBACK_MODELS),
+            )
+        self.fallback_models = [
+            candidate.strip()
+            for candidate in fallback_models.split(',')
+            if candidate.strip() and candidate.strip() != model
+        ]
+
+    def _candidate_models(self):
+        seen = set()
+        for candidate in [self.model, *self.fallback_models]:
+            if candidate not in seen:
+                seen.add(candidate)
+                yield candidate
+
+    def _build_headers(self):
+        return {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json'
+        }
+
+    def _build_request_payload(self, candidate_model, messages):
+        payload = {
+            'model': candidate_model,
+            'messages': messages,
+        }
+
+        # Qwen 3.6 Plus on OpenRouter defaults to long reasoning output, which
+        # makes this synchronous video pipeline feel stuck for large scene counts.
+        if (
+            'openrouter.ai' in self.base_url.lower()
+            and candidate_model.startswith('qwen/qwen3.6-plus')
+        ):
+            payload['reasoning'] = {
+                'effort': 'none',
+                'exclude': True,
+            }
+
+        return payload
+
+    def _extract_error_message(self, response):
+        try:
+            payload = response.json()
+        except ValueError:
+            return response.text.strip() or f"HTTP {response.status_code}"
+
+        error = payload.get('error')
+        if isinstance(error, dict):
+            return error.get('message') or str(error)
+        if error:
+            return str(error)
+        return response.text.strip() or f"HTTP {response.status_code}"
+
+    def _response_preview(self, response, limit=200):
+        text = response.text.strip()
+        if not text:
+            return "空响应"
+        return text[:limit]
+
+    def _build_generate_script_messages(self, scene_description):
+        prompt = f"""请根据下面这段镜头描述，判断这个镜头里的人有没有在说话。
+
+如果镜头里的人正在说话，只输出一句自然的中文口播台词，长度控制在 20 到 50 个字。
+如果镜头里没有人在说话，或者看起来不像口播镜头，只输出：无台词
+
+硬性要求：
+1. 只能输出最终答案
+2. 不要解释原因
+3. 不要输出标题、序号、Markdown
+4. 不要改写成分镜说明
+
+镜头描述：
+{scene_description}
+"""
+        return [
+            {
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': prompt
+                    }
+                ]
+            }
+        ]
+
+    def _normalize_script_output(self, script):
+        if not script:
+            return ""
+
+        cleaned_lines = [line.strip() for line in script.splitlines() if line.strip()]
+        if not cleaned_lines:
+            return ""
+
+        first_line = cleaned_lines[0].strip('"\''"“”")
+        for prefix in ("台词：", "台词:", "答案：", "答案:", "输出：", "输出:"):
+            if first_line.startswith(prefix):
+                first_line = first_line[len(prefix):].strip()
+                break
+
+        if "无台词" in first_line:
+            return ""
+
+        return first_line
+
+    def _request_chat_completion(self, messages, action):
+        models_to_try = list(self._candidate_models())
+        last_error_message = 'AI 服务调用失败'
+
+        for candidate_model in models_to_try:
+            for attempt in range(1, MAX_RESPONSE_PARSE_RETRIES + 1):
+                response = None
+                for request_attempt in range(1, self.request_max_retries + 1):
+                    try:
+                        response = requests.post(
+                            self.base_url,
+                            headers=self._build_headers(),
+                            json=self._build_request_payload(candidate_model, messages),
+                            timeout=self.request_timeout_seconds,
+                        )
+                        break
+                    except (requests.Timeout, requests.ConnectionError) as exc:
+                        last_error_message = (
+                            f"{candidate_model} {action} 超时或连接失败，"
+                            f"第 {request_attempt} 次尝试，"
+                            f"超时设置 {self.request_timeout_seconds} 秒：{str(exc)}"
+                        )
+                        if request_attempt < self.request_max_retries and self.request_retry_delay_seconds:
+                            time.sleep(self.request_retry_delay_seconds)
+                        continue
+                    except requests.RequestException as exc:
+                        raise AIServiceError(f"{action}失败：{str(exc)}") from exc
+
+                if response is None:
+                    break
+
+                if response.ok:
+                    try:
+                        result = response.json()
+                    except ValueError:
+                        last_error_message = (
+                            f"{candidate_model} 返回了无法解析的 JSON，第 {attempt} 次尝试失败。"
+                            f"响应开头：{self._response_preview(response)}"
+                        )
+                        if attempt < MAX_RESPONSE_PARSE_RETRIES:
+                            continue
+                        break
+
+                    usage = result.get('usage', {})
+                    _log_token_usage(
+                        candidate_model,
+                        action,
+                        usage.get('prompt_tokens', 0),
+                        usage.get('completion_tokens', 0),
+                    )
+                    self.model = candidate_model
+                    return result['choices'][0]['message']['content'].strip()
+
+                error_message = self._extract_error_message(response)
+                last_error_message = error_message
+                region_blocked = (
+                    response.status_code == 403
+                    and 'not available in your region' in error_message.lower()
+                )
+                if region_blocked:
+                    break
+
+                raise AIServiceError(f"{action}失败：{error_message}")
+
+        raise AIServiceError(
+            f"{action}失败：已尝试模型 {', '.join(models_to_try)}。最后错误：{last_error_message}"
+        )
     
     def encode_image(self, image_path):
         with open(image_path, 'rb') as image_file:
@@ -87,14 +288,8 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
 
 请直接输出提示词，不要有其他解释。"""
         
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': self.model,
-            'messages': [
+        return self._request_chat_completion(
+            [
                 {
                     'role': 'user',
                     'content': [
@@ -110,18 +305,9 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
                         }
                     ]
                 }
-            ]
-        }
-        
-        try:
-            response = requests.post(self.base_url, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            usage = result.get('usage', {})
-            _log_token_usage(self.model, '分析镜头画面', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
-            return result['choices'][0]['message']['content'].strip()
-        except Exception as e:
-            return f"Error analyzing frame: {str(e)}"
+            ],
+            '分析镜头画面',
+        )
     
     def analyze_global_context(self, first_frame_path, last_frame_path):
         if not first_frame_path or not last_frame_path:
@@ -142,39 +328,27 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
 
 保持简洁，每项不超过50字。"""
         
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': self.model,
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'text',
-                            'text': prompt
-                        },
-                        {
-                            'type': 'image_url',
-                            'image_url': {
-                                'url': f'data:image/jpeg;base64,{base64_first}'
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-        
         try:
-            response = requests.post(self.base_url, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            usage = result.get('usage', {})
-            _log_token_usage(self.model, '分析全局信息', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
-            content = result['choices'][0]['message']['content'].strip()
+            content = self._request_chat_completion(
+                [
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': prompt
+                            },
+                            {
+                                'type': 'image_url',
+                                'image_url': {
+                                    'url': f'data:image/jpeg;base64,{base64_first}'
+                                }
+                            }
+                        ]
+                    }
+                ],
+                '分析全局信息',
+            )
             
             lines = content.split('\n')
             global_info = {
@@ -192,73 +366,19 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
                     global_info['main_scene'] = line.split('：')[-1].split(':')[-1].strip()
             
             return global_info
-        except Exception as e:
-            return {
-                'style': f'Error: {str(e)}',
-                'main_character': 'Error analyzing',
-                'main_scene': 'Error analyzing'
-            }
+        except AIServiceError:
+            raise
     
     def generate_script(self, image_path, scene_description):
-        base64_image = self.encode_image(image_path)
-        
-        prompt = f"""请分析这个视频镜头，判断是否是口播场景（有人对着镜头说话）。
-
-如果是口播场景，请根据画面内容和场景描述，生成一段合适的中文台词（20-50字）。
-如果不是口播场景，请输出"无台词"。
-
-场景描述：{scene_description}
-
-要求：
-1. 台词要自然、口语化
-2. 符合画面中人物的身份和场景
-3. 如果是产品介绍，要突出产品特点
-4. 如果是教学，要清晰易懂
-5. 直接输出台词，不要有其他解释
-
-示例：
-- 产品介绍："大家好，今天给大家带来一款全新的智能手表，它不仅外观时尚，功能也非常强大。"
-- 教学场景："接下来我们来学习如何使用这个工具，首先打开主界面。"
-- 日常分享："这家咖啡店的环境真的很棒，特别适合周末来放松一下。"
-"""
-        
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': self.model,
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'text',
-                            'text': prompt
-                        },
-                        {
-                            'type': 'image_url',
-                            'image_url': {
-                                'url': f'data:image/jpeg;base64,{base64_image}'
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-        
         try:
-            response = requests.post(self.base_url, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            usage = result.get('usage', {})
-            _log_token_usage(self.model, '生成台词', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
-            script = result['choices'][0]['message']['content'].strip()
-            return script if script and script != "无台词" else ""
-        except Exception as e:
-            return ""
-    
+            script = self._request_chat_completion(
+                self._build_generate_script_messages(scene_description),
+                '生成镜头台词',
+            )
+            return self._normalize_script_output(script)
+        except AIServiceError:
+            raise
+
     def generate_complete_prompt(self, scene_description, script, duration, shot_type='medium shot'):
         """
         生成完整的 Sora 提示词，包含所有参数、设定和台词
@@ -386,33 +506,21 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
 
 请直接输出，不要有其他解释。"""
         
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': self.model,
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'text',
-                            'text': prompt
-                        }
-                    ]
-                }
-            ]
-        }
-        
         try:
-            response = requests.post(self.base_url, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            usage = result.get('usage', {})
-            _log_token_usage(self.model, '情绪转换分析', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
-            content = result['choices'][0]['message']['content'].strip()
+            content = self._request_chat_completion(
+                [
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': prompt
+                            }
+                        ]
+                    }
+                ],
+                '情绪转换分析',
+            )
             
             emotion_info = {
                 'original_emotion': '',
@@ -445,12 +553,8 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
             
             return emotion_info
             
-        except Exception as e:
-            return {
-                'original_emotion': f'Error: {str(e)}',
-                'emotion_mapping': 'Error analyzing',
-                'transformed_scenario': 'Error analyzing'
-            }
+        except AIServiceError:
+            raise
     
     def generate_condensed_script(self, analyzed_scenes, keyframe_paths, emotion_context=None):
         """
@@ -544,33 +648,21 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
 中文提示词(Seedance 2.0): 一位8岁的中国女孩，齐肩黑色马尾辫，穿着深圳夏季校服（白色短袖衬衫配深蓝色短裙和白色运动鞋），最初坐在深圳现代家庭客厅的黑色立式钢琴前，低着头双手抱胸，妈妈站在旁边焦急地说"快点练琴，马上要考级了"，女孩皱着眉头不情愿地触碰琴键，妈妈拿出横屏iPad打开@启动页，屏幕显示西西魔法钢琴的游戏界面，妈妈温柔地说"宝贝，妈妈发现了一个好玩的App，我们试试看"，女孩眼神一亮，横屏iPad放在琴谱架上显示@练琴页，女孩跟着App的指引开始弹奏，手指在琴键上越来越流畅，App发出鼓励的音效"太棒了！"，女孩露出笑容说"原来练琴可以这么好玩"，妈妈也放松地微笑，温暖的午后阳光透过米色纱帘洒进客厅，在浅色木地板和钢琴表面形成柔和的光影，整体色调温馨明亮偏暖，现代简约的家居风格，米色沙发配浅木色茶几，镜头从全景缓缓推进到女孩和横屏iPad的近景，从紧张抗拒到主动快乐的情感转变，治愈系亲子关系改善的温馨故事，背景有琴键声和App的轻柔音乐
 """
         
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': self.model,
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'text',
-                            'text': prompt
-                        }
-                    ]
-                }
-            ]
-        }
-        
         try:
-            response = requests.post(self.base_url, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            usage = result.get('usage', {})
-            _log_token_usage(self.model, '生成浓缩脚本', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
-            content = result['choices'][0]['message']['content'].strip()
+            content = self._request_chat_completion(
+                [
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': prompt
+                            }
+                        ]
+                    }
+                ],
+                '生成浓缩脚本',
+            )
             
             condensed_info = {
                 'duration': '10-15秒',
@@ -611,15 +703,8 @@ A young Chinese man in his 30s speaking in Mandarin Chinese to the camera in a m
             
             return condensed_info
             
-        except Exception as e:
-            return {
-                'duration': '10-15秒',
-                'core_story': f'Error: {str(e)}',
-                'key_scene_1': 'Error analyzing',
-                'key_scene_2': 'Error analyzing',
-                'key_scene_3': 'Error analyzing',
-                'complete_prompt': 'Error generating prompt'
-            }
+        except AIServiceError:
+            raise
     
     def generate_seedance_prompt_for_scene(self, scene_description, script, first_frame_path, last_frame_path, scene_number):
         """
@@ -670,33 +755,21 @@ Seedance 2.0 核心规则：
 
 请直接输出提示词，不要有其他解释。"""
         
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': self.model,
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'text',
-                            'text': prompt
-                        }
-                    ]
-                }
-            ]
-        }
-        
         try:
-            response = requests.post(self.base_url, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            usage = result.get('usage', {})
-            _log_token_usage(self.model, '生成镜头Seedance提示词', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
-            seedance_prompt = result['choices'][0]['message']['content'].strip()
+            seedance_prompt = self._request_chat_completion(
+                [
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': prompt
+                            }
+                        ]
+                    }
+                ],
+                '生成镜头Seedance提示词',
+            )
             
             # 提取产品图片引用
             return {
@@ -704,11 +777,8 @@ Seedance 2.0 核心规则：
                 'product_images': _collect_product_images(seedance_prompt)
             }
             
-        except Exception as e:
-            return {
-                'seedance_prompt': f"生成失败: {str(e)}",
-                'product_images': []
-            }
+        except AIServiceError:
+            raise
     
     def generate_two_part_script(self, analyzed_scenes, keyframe_paths, emotion_context=None):
         """
@@ -843,33 +913,21 @@ Seedance 2.0 核心规则：
 
 请直接输出，不要有其他解释。"""
         
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': self.model,
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'text',
-                            'text': prompt
-                        }
-                    ]
-                }
-            ]
-        }
-        
         try:
-            response = requests.post(self.base_url, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            usage = result.get('usage', {})
-            _log_token_usage(self.model, '生成两段式脚本', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
-            content = result['choices'][0]['message']['content'].strip()
+            content = self._request_chat_completion(
+                [
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': prompt
+                            }
+                        ]
+                    }
+                ],
+                '生成两段式脚本',
+            )
             
             two_part_info = {
                 'core_story': '',
@@ -911,14 +969,8 @@ Seedance 2.0 核心规则：
             
             return two_part_info
             
-        except Exception as e:
-            return {
-                'core_story': f'Error: {str(e)}',
-                'part1_content': 'Error analyzing',
-                'part2_content': 'Error analyzing',
-                'part1_seedance_prompt': 'Error generating',
-                'part2_seedance_prompt': 'Error generating'
-            }
+        except AIServiceError:
+            raise
     
     def generate_seedance_prompt_for_condensed(self, condensed_script_info):
         """
@@ -967,41 +1019,26 @@ Seedance 2.0 核心规则：
 
 请直接输出提示词，不要有其他解释。"""
         
-        headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
-        
-        data = {
-            'model': self.model,
-            'messages': [
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'text',
-                            'text': prompt
-                        }
-                    ]
-                }
-            ]
-        }
-        
         try:
-            response = requests.post(self.base_url, headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            usage = result.get('usage', {})
-            _log_token_usage(self.model, '生成浓缩Seedance提示词', usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
-            seedance_prompt = result['choices'][0]['message']['content'].strip()
+            seedance_prompt = self._request_chat_completion(
+                [
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': prompt
+                            }
+                        ]
+                    }
+                ],
+                '生成浓缩Seedance提示词',
+            )
             
             return {
                 'seedance_prompt': seedance_prompt,
                 'product_images': _collect_product_images(seedance_prompt)
             }
             
-        except Exception as e:
-            return {
-                'seedance_prompt': f"生成失败: {str(e)}",
-                'product_images': []
-            }
+        except AIServiceError:
+            raise

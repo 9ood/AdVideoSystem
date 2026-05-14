@@ -4,78 +4,141 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>视频翻拍系统 - AdVideoSystem</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🎬 视频翻拍系统</h1>
-            <p class="subtitle">AI 驱动的视频分析与脚本生成</p>
-            <a href="/token_usage_page" class="token-usage-link">📊 查看 Token 用量</a>
-        </header>
-
-        <main>
-            <div class="upload-section" id="uploadSection">
-                <div class="upload-box">
-                    <div class="upload-icon">📹</div>
-                    <h2>上传视频</h2>
-                    <p>支持 MP4, MOV, AVI, MKV 格式</p>
-                    <input type="file" id="videoInput" accept="video/*" style="display: none;">
-                    <button class="btn btn-primary" onclick="document.getElementById('videoInput').click()">
-                        选择视频文件
-                    </button>
-                    <p class="file-name" id="fileName"></p>
+    <div class="page stack">
+        <section class="panel panel-body hero">
+            <div class="hero-top">
+                <div>
+                    <div class="eyebrow">AdVideoSystem</div>
+                    <h1 class="page-title">AI 视频翻拍系统</h1>
+                    <p class="paragraph">把视频上传进来，系统会自动拆镜头、分析画面、生成脚本，并打包导出可下载结果。</p>
+                </div>
+                <div class="hero-actions">
+                    <span class="badge accent">网页服务</span>
+                    <a href="/token_usage_page" class="btn btn-secondary">查看 Token 用量</a>
                 </div>
             </div>
 
-            <div class="processing-section" id="processingSection" style="display: none;">
-                <div class="progress-box">
-                    <h2>处理中...</h2>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill"></div>
+            <div class="layout">
+                <div class="steps">
+                    <div class="step-item">
+                        <strong><span class="step-index">1</span>选择视频文件</strong>
+                        <div class="muted">支持 MP4、MOV、AVI、MKV。选中文件后会自动开始上传。</div>
                     </div>
-                    <p class="progress-text" id="progressText">正在上传视频...</p>
-                    <div class="spinner"></div>
-                </div>
-            </div>
-
-            <div class="result-section" id="resultSection" style="display: none;">
-                <div class="result-box">
-                    <div class="success-icon">✅</div>
-                    <h2>处理完成！</h2>
-                    <div class="result-info">
-                        <p>检测到 <strong id="sceneCount">0</strong> 个镜头</p>
-                        <p>已生成 Sora 脚本和关键帧图片</p>
+                    <div class="step-item">
+                        <strong><span class="step-index">2</span>等待系统处理</strong>
+                        <div class="muted">系统会自动做镜头检测、关键帧提取、AI 分析和脚本生成。</div>
                     </div>
-                    <div class="download-buttons">
-                        <button class="btn btn-success" id="downloadBtn">
-                            📦 下载完整包
-                        </button>
-                        <button class="btn btn-success" id="downloadCleanBtn">
-                            📄 下载纯脚本
-                        </button>
+                    <div class="step-item">
+                        <strong><span class="step-index">3</span>下载结果包</strong>
+                        <div class="muted">处理完成后可以下载完整包，也可以只下载纯脚本 Excel。</div>
                     </div>
-                    <button class="btn btn-secondary" onclick="location.reload()">
-                        🔄 处理新视频
-                    </button>
+                </div>
+
+                <div class="facts">
+                    <div class="fact-card">
+                        <strong>你会得到什么</strong>
+                        <div class="muted">关键帧图片、分镜脚本、完整 Excel、可直接下载的结果包。</div>
+                    </div>
+                    <div class="fact-card">
+                        <strong>适合什么时候用</strong>
+                        <div class="muted">你已经有成品视频，想快速拆解镜头结构、脚本和画面提示词的时候。</div>
+                    </div>
+                    <div class="fact-card">
+                        <strong>现在最重要的提示</strong>
+                        <div class="muted">这个页面会自动开始处理，不需要再点第二个“开始”按钮。</div>
+                    </div>
                 </div>
             </div>
+        </section>
 
-            <div class="error-section" id="errorSection" style="display: none;">
-                <div class="error-box">
-                    <div class="error-icon">❌</div>
-                    <h2>处理失败</h2>
-                    <p class="error-message" id="errorMessage"></p>
-                    <button class="btn btn-secondary" onclick="location.reload()">
-                        🔄 重新开始
-                    </button>
+        <section class="panel panel-body">
+            <div class="upload-grid">
+                <div class="upload-section" id="uploadSection">
+                    <div class="upload-card">
+                        <div>
+                            <div class="upload-mark">视</div>
+                            <h2>上传视频</h2>
+                            <p class="paragraph">先选一个视频文件，系统会立刻开始上传和处理。</p>
+                            <input type="file" id="videoInput" accept="video/*" class="hidden">
+                            <div class="btn-row">
+                                <button class="btn btn-primary" type="button" onclick="document.getElementById('videoInput').click()">
+                                    选择视频文件
+                                </button>
+                            </div>
+                            <p class="file-name" id="fileName"></p>
+                            <div class="upload-note">
+                                小提醒：上传后页面会自动切到“处理中”，这是正常的，不用重复点按钮。
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </main>
 
-        <footer>
-            <p>Powered by OpenRouter + Gemini 3 Flash</p>
-        </footer>
+                <div class="processing-section hidden" id="processingSection">
+                    <div class="progress-card">
+                        <h2>正在处理</h2>
+                        <p class="paragraph">系统已经开始工作，请等它把镜头、脚本和结果包准备好。</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <p class="paragraph" id="progressText">正在上传视频...</p>
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+
+                <div class="result-section hidden" id="resultSection">
+                    <div class="result-card">
+                        <h2>处理完成</h2>
+                        <p class="paragraph">这次视频已经分析好了，下面可以直接下载结果。</p>
+                        <div class="summary-box">
+                            <div class="muted">检测到的镜头数</div>
+                            <strong id="sceneCount">0</strong>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn btn-success" id="downloadBtn" type="button">下载完整包</button>
+                            <button class="btn btn-success" id="downloadCleanBtn" type="button">下载纯脚本 Excel</button>
+                            <button class="btn btn-secondary" type="button" onclick="location.reload()">处理新视频</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="error-section hidden" id="errorSection">
+                    <div class="error-card">
+                        <h2>处理失败</h2>
+                        <p class="paragraph">这次没有顺利完成，先看清楚下面的原因，再决定要不要重试。</p>
+                        <div class="error-message" id="errorMessage"></div>
+                        <div class="btn-row">
+                            <button class="btn btn-secondary" type="button" onclick="location.reload()">重新开始</button>
+                        </div>
+                    </div>
+                </div>
+
+                <aside class="side-card">
+                    <strong class="title">这页怎么读</strong>
+                    <div class="actions">
+                        <div class="action-card">
+                            <strong>左边是操作区</strong>
+                            <div class="muted">你选文件、看进度、下载结果，都在左边完成。</div>
+                        </div>
+                        <div class="action-card">
+                            <strong>处理时只要等待</strong>
+                            <div class="muted">不用刷新，也不用再点其他按钮，系统会自己往下走。</div>
+                        </div>
+                        <div class="action-card">
+                            <strong>失败时先看原因</strong>
+                            <div class="muted">如果报错，先看红色提示，再决定是换文件还是重新尝试。</div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <div class="footer">Powered by OpenRouter + Gemini 3 Flash</div>
     </div>
 
     <script src="/static/js/app.js"></script>

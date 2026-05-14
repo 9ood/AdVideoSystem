@@ -6,7 +6,7 @@ from waitress import serve
 from app import app
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 if __name__ == "__main__":
