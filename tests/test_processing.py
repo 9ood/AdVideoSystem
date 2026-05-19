@@ -361,6 +361,81 @@ App界面出现方式: 手机特写
                 if hasattr(workbook, "_archive"):
                     workbook._archive.close()
 
+    def test_condensed_script_prompt_locks_creative_playbook(self):
+        analyzer = AIAnalyzer("test-key", "gemini-3.1-flash-lite-preview")
+        captured = {}
+
+        def fake_request(messages, action):
+            captured["prompt"] = messages[0]["content"][0]["text"]
+            return """core story: Piano practice keeps the source ad mechanism.
+key scene 1: alarm clock and app trigger
+key scene 2: countdown and training montage
+key scene 3: purpose slogan ending
+creative inheritance: kept time jumps, countdown, montage, and value slogan
+complete prompt: A fast montage keeps the original playbook while replacing running with piano practice."""
+
+        creative_core = {
+            "opening_hook": "alarm clock",
+            "storyline": "time -> app -> training -> slogan",
+            "visual_structure": "time jumps, countdown, montage",
+            "product_role": "training trigger",
+            "proof_method": "action starts after countdown",
+            "emotion_curve": "pressure to purpose",
+            "must_preserve": "time, app, training, purpose slogan",
+            "template_risk": "do not make it a static family practice story",
+        }
+
+        with patch.object(analyzer, "_request_chat_completion", side_effect=fake_request):
+            result = analyzer.generate_condensed_script(
+                [
+                    {
+                        "start_time": 0,
+                        "end_time": 2,
+                        "duration": 2,
+                        "prompt": "alarm clock and running app",
+                        "script": "",
+                    }
+                ],
+                [],
+                creative_core=creative_core,
+            )
+
+        self.assertIn("CREATIVE LOCK - MUST FOLLOW", captured["prompt"])
+        self.assertIn("Do not collapse the remake into one static room", captured["prompt"])
+        self.assertIn("关键画面1", captured["prompt"])
+        self.assertIn("time jumps, countdown, montage", captured["prompt"])
+        self.assertEqual(result["key_scene_2"], "countdown and training montage")
+        self.assertEqual(
+            result["creative_inheritance_check"],
+            "kept time jumps, countdown, montage, and value slogan",
+        )
+
+    def test_condensed_seedance_prompt_keeps_creative_lock(self):
+        analyzer = AIAnalyzer("test-key", "gemini-3.1-flash-lite-preview")
+        captured = {}
+
+        def fake_request(messages, action):
+            captured["prompt"] = messages[0]["content"][0]["text"]
+            return "seedance prompt"
+
+        with patch.object(analyzer, "_request_chat_completion", side_effect=fake_request):
+            result = analyzer.generate_seedance_prompt_for_condensed(
+                {
+                    "core_story": "demo",
+                    "complete_prompt": "demo",
+                },
+                creative_core={
+                    "visual_structure": "fake documentary",
+                    "must_preserve": "director loses control of the shoot",
+                    "template_risk": "do not turn it into normal family practice",
+                },
+            )
+
+        self.assertEqual(result["seedance_prompt"], "seedance prompt")
+        self.assertIn("CREATIVE LOCK - MUST FOLLOW", captured["prompt"])
+        self.assertIn("fake documentary", captured["prompt"])
+        self.assertIn("director loses control", captured["prompt"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -819,6 +819,33 @@ App界面出现方式: [iPad特写、手机录屏、背景大屏、叠加UI、�
 4. 西西魔法钢琴可以替换原App，但不能吃掉原视频的创意结构。
 """
     
+    def _build_creative_preservation_contract(self, creative_core):
+        if not creative_core:
+            return ""
+
+        return f"""
+[CREATIVE LOCK - MUST FOLLOW]
+The source video's creative playbook is not optional background. It is the script skeleton.
+When rewriting for 西西魔法钢琴, replace only the product/action surface, not the ad mechanism.
+
+Must preserve, explicitly in the final script:
+1. Opening hook: {creative_core.get('opening_hook', '')}
+2. Storyline order: {creative_core.get('storyline', '')}
+3. Visual mechanism / shot pattern: {creative_core.get('visual_structure', '')}
+4. Product role in the story: {creative_core.get('product_role', '')}
+5. Proof method: {creative_core.get('proof_method', '')}
+6. Emotion curve: {creative_core.get('emotion_curve', '')}
+7. Non-negotiable skeleton: {creative_core.get('must_preserve', '')}
+8. Template trap to avoid: {creative_core.get('template_risk', '')}
+
+Hard rules:
+- If the original uses time jumps, countdowns, montage, split-screen, fake documentary, product UI demo, stage performance, or reversal comedy, the remake must show that same mechanism.
+- Do not collapse the remake into one static room, one child, one iPad, and generic piano practice unless the original itself is that kind of story.
+- If the source has multiple locations or repeated time beats, compress them into several fast micro-scenes instead of deleting them.
+- The app should keep the source product's dramatic role: coach, trigger, proof, dashboard, joke source, portal, or visual evidence. Do not turn it into a generic parent helper.
+- The ending must echo the source ending logic: applause, proof, download conversion, value slogan, reversal punchline, or UI reveal.
+"""
+
     def generate_condensed_script(self, analyzed_scenes, keyframe_paths, emotion_context=None, creative_core=None):
         """
         生成浓缩脚本（10-15秒版本）
@@ -856,6 +883,7 @@ App界面出现方式: [iPad特写、手机录屏、背景大屏、叠加UI、�
 """
         
         creative_core_context = self._build_creative_core_context(creative_core)
+        creative_preservation_contract = self._build_creative_preservation_contract(creative_core)
 
         prompt = f"""你是一个专业的视频导演和编剧，精通Seedance 2.0提示词规范。现在有一个{total_duration:.1f}秒的视频，包含{len(analyzed_scenes)}个镜头。你的任务是：把这个视频改编成一个10-15秒的西西魔法钢琴广告。
 
@@ -866,6 +894,8 @@ App界面出现方式: [iPad特写、手机录屏、背景大屏、叠加UI、�
 4. 不要默认套用固定家庭练琴模板，除非原视频本身就是这种结构
 
 {creative_core_context}
+
+{creative_preservation_contract}
 
 {emotion_context_text}
 
@@ -890,7 +920,15 @@ App界面出现方式: [iPad特写、手机录屏、背景大屏、叠加UI、�
 
 请按以下格式输出:
 
-核心故事: [用1-2句话概括转换后的琴童家庭故事]
+核心故事: [用1-2句话概括转换后的西西魔法钢琴广告故事，必须说明保留了原视频哪种玩法，不要只写普通练琴故事]
+
+关键画面1: [0-5秒，必须保留原视频的开头钩子和第一个创意机制，不要只写普通练琴]
+
+关键画面2: [5-10秒，必须保留原视频的中段证明方式，如倒计时、蒙太奇、版本对比、伪纪录失控、UI演示等]
+
+关键画面3: [10-15秒，必须保留原视频的结尾逻辑，如口号、证明结果、反转笑点、下载转化或UI展示]
+
+创意继承检查: [用一句话说明保留了哪些原视频玩法，不能空着]
 
 中文提示词(Seedance 2.0): [用中文写一个完整的、可以直接复制粘贴使用的Seedance 2.0提示词。
 
@@ -938,6 +976,7 @@ App界面出现方式: [iPad特写、手机录屏、背景大屏、叠加UI、�
                 'key_scene_1': '',
                 'key_scene_2': '',
                 'key_scene_3': '',
+                'creative_inheritance_check': '',
                 'complete_prompt': ''
             }
             
@@ -957,6 +996,8 @@ App界面出现方式: [iPad特写、手机录屏、背景大屏、叠加UI、�
                     condensed_info['key_scene_2'] = line.split(':', 1)[-1].split('：', 1)[-1].strip()
                 elif '关键画面3' in line or 'key scene 3' in line.lower():
                     condensed_info['key_scene_3'] = line.split(':', 1)[-1].split('：', 1)[-1].strip()
+                elif '创意继承检查' in line or 'creative inheritance' in line.lower():
+                    condensed_info['creative_inheritance_check'] = line.split(':', 1)[-1].split('：', 1)[-1].strip()
                 elif '完整提示词' in line or 'complete prompt' in line.lower():
                     current_field = 'complete_prompt'
                     prompt_text = line.split(':', 1)[-1].split('：', 1)[-1].strip()
@@ -1085,6 +1126,7 @@ Seedance 2.0 核心规则：
 """
         
         creative_core_context = self._build_creative_core_context(creative_core)
+        creative_preservation_contract = self._build_creative_preservation_contract(creative_core)
 
         prompt = f"""你是一个专业的视频导演和编剧，精通Seedance 2.0提示词规范。现在有一个{total_duration:.1f}秒的视频，包含{len(analyzed_scenes)}个镜头。你的任务是：把这个视频拆分成上下两集，每集10秒，总共20秒，改编成西西魔法钢琴广告。
 
@@ -1095,6 +1137,8 @@ Seedance 2.0 核心规则：
 4. 上集和下集的分工必须服从原视频创意：可以是问题→解决，也可以是挑战→进步、片场失控→反向证明、产品演示→下载转化、游戏化体验→回到现实等
 
 {creative_core_context}
+
+{creative_preservation_contract}
 
 {emotion_context_text}
 
@@ -1258,10 +1302,13 @@ Seedance 2.0 核心规则：
         core_story = condensed_script_info.get('core_story', '')
         complete_prompt = condensed_script_info.get('complete_prompt', '')
         creative_core_context = self._build_creative_core_context(creative_core)
+        creative_preservation_contract = self._build_creative_preservation_contract(creative_core)
         
         prompt = f"""你是一个专业的 Seedance 2.0 提示词生成专家。请根据以下浓缩脚本信息，生成一个符合 Seedance 2.0 规范的中文提示词。
 
 {creative_core_context}
+
+{creative_preservation_contract}
 
 Seedance 2.0 核心规则：
 1. 8维度公式：[主体] + [动作] + [场景] + [风格] + [情绪] + [光影] + [运镜] + [细节]

@@ -95,6 +95,7 @@ class ExcelGenerator:
             condensed_data = [
                 ['视频时长', condensed_script.get('duration', '10-15秒')],
                 ['核心故事', condensed_script.get('core_story', '')],
+                ['创意继承检查', condensed_script.get('creative_inheritance_check', '')],
                 ['关键画面1 (0-5秒)', condensed_script.get('key_scene_1', '')],
                 ['关键画面2 (5-10秒)', condensed_script.get('key_scene_2', '')],
                 ['关键画面3 (10-15秒)', condensed_script.get('key_scene_3', '')],
@@ -110,7 +111,7 @@ class ExcelGenerator:
             if not clean_mode:
                 product_images = condensed_script.get('product_images', [])
                 if product_images:
-                    row_idx = 8
+                    row_idx = 9
                     ws_condensed.row_dimensions[row_idx].height = max(100, len(product_images) * 80)
                     
                     for img_idx, img_path in enumerate(product_images):
