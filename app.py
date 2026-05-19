@@ -110,6 +110,8 @@ def process_video(task_id):
         base_url = os.getenv("AI_API_BASE_URL", "https://openrouter.ai/api/v1/chat/completions")
         analyzer = AIAnalyzer(api_key, model, base_url=base_url)
 
+        creative_core = analyzer.analyze_creative_core_from_keyframes(frames_info)
+
         analyzed_scenes = []
         for i, frame_info in enumerate(frames_info):
             prompt = analyzer.analyze_frame(frame_info["keyframe_path"])
@@ -144,20 +146,32 @@ def process_video(task_id):
         )
 
         keyframe_paths = [frame_info["keyframe_path"] for frame_info in frames_info]
-        condensed_script = analyzer.generate_condensed_script(analyzed_scenes, keyframe_paths)
+        condensed_script = analyzer.generate_condensed_script(
+            analyzed_scenes,
+            keyframe_paths,
+            creative_core=creative_core,
+        )
 
         if condensed_script:
-            condensed_seedance_result = analyzer.generate_seedance_prompt_for_condensed(condensed_script)
+            condensed_seedance_result = analyzer.generate_seedance_prompt_for_condensed(
+                condensed_script,
+                creative_core=creative_core,
+            )
             condensed_script["seedance_prompt"] = condensed_seedance_result.get("seedance_prompt", "")
             condensed_script["product_images"] = condensed_seedance_result.get("product_images", [])
 
-        two_part_script = analyzer.generate_two_part_script(analyzed_scenes, keyframe_paths)
+        two_part_script = analyzer.generate_two_part_script(
+            analyzed_scenes,
+            keyframe_paths,
+            creative_core=creative_core,
+        )
 
         excel_gen = ExcelGenerator(output_dir)
-        excel_gen.generate(global_info, analyzed_scenes, condensed_script, two_part_script)
+        excel_gen.generate(global_info, analyzed_scenes, condensed_script, two_part_script, creative_core)
 
         analysis_data = {
             "global_info": global_info,
+            "creative_core": creative_core,
             "analyzed_scenes": analyzed_scenes,
             "condensed_script": condensed_script,
             "two_part_script": two_part_script,
@@ -244,6 +258,7 @@ def download_clean_result(task_id):
             analysis_data["analyzed_scenes"],
             analysis_data["condensed_script"],
             analysis_data["two_part_script"],
+            analysis_data.get("creative_core"),
             clean_mode=True,
         )
 

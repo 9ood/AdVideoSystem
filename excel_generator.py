@@ -8,7 +8,7 @@ class ExcelGenerator:
     def __init__(self, output_dir):
         self.output_dir = output_dir
     
-    def generate(self, global_info, scenes, condensed_script=None, two_part_script=None, clean_mode=False):
+    def generate(self, global_info, scenes, condensed_script=None, two_part_script=None, creative_core=None, clean_mode=False):
         wb = Workbook()
         
         ws_global = wb.active
@@ -40,6 +40,42 @@ class ExcelGenerator:
         
         ws_global.column_dimensions['A'].width = 20
         ws_global.column_dimensions['B'].width = 60
+
+        if creative_core:
+            ws_creative = wb.create_sheet(title="创意内核")
+
+            ws_creative['A1'] = '项目'
+            ws_creative['B1'] = '内容'
+            ws_creative['A1'].fill = header_fill
+            ws_creative['B1'].fill = header_fill
+            ws_creative['A1'].font = header_font
+            ws_creative['B1'].font = header_font
+
+            creative_core_data = [
+                ['一句话创意内核', creative_core.get('one_sentence', '')],
+                ['广告类型', creative_core.get('ad_type', '')],
+                ['开头钩子', creative_core.get('opening_hook', '')],
+                ['故事线', creative_core.get('storyline', '')],
+                ['核心冲突/看点', creative_core.get('conflict', '')],
+                ['App在故事里的角色', creative_core.get('product_role', '')],
+                ['App界面出现方式', creative_core.get('app_ui', '')],
+                ['证明App有用的方式', creative_core.get('proof_method', '')],
+                ['关键镜头套路', creative_core.get('visual_structure', '')],
+                ['情绪变化', creative_core.get('emotion_curve', '')],
+                ['翻拍必须保留的骨架', creative_core.get('must_preserve', '')],
+                ['翻拍可以替换的元素', creative_core.get('replaceable', '')],
+                ['最容易被错误套模板的地方', creative_core.get('template_risk', '')],
+                ['西西魔法钢琴翻拍建议', creative_core.get('remake_guidance', '')],
+            ]
+
+            for i, row_data in enumerate(creative_core_data, start=2):
+                ws_creative[f'A{i}'] = row_data[0]
+                ws_creative[f'B{i}'] = row_data[1]
+                ws_creative[f'B{i}'].alignment = Alignment(wrap_text=True, vertical='top')
+                ws_creative.row_dimensions[i].height = 45
+
+            ws_creative.column_dimensions['A'].width = 28
+            ws_creative.column_dimensions['B'].width = 100
         
         if condensed_script:
             ws_condensed = wb.create_sheet(title="浓缩脚本")
@@ -261,6 +297,7 @@ class ExcelGenerator:
         
         excel_path = os.path.join(self.output_dir, 'video_script.xlsx')
         wb.save(excel_path)
+        wb.close()
         
         return excel_path
     
